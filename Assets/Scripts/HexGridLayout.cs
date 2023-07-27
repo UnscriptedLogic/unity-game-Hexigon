@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 public class HexGridLayout : MonoBehaviour
 {
@@ -14,26 +15,38 @@ public class HexGridLayout : MonoBehaviour
 
     private void LayoutGrid()
     {
+        //Center
+        CreateHex(transform.position);
+        
         for (int i = 0; i < rings; i++)
         {
-            GameObject tile = new GameObject($"Hex", typeof(HexRenderer));
-
-            tile.transform.position = GenerateRing(i);
-
-            HexRenderer hexRenderer = tile.GetComponent<HexRenderer>();
-            hexRenderer.InitializeMesh(hexData);
-
-            tile.transform.SetParent(transform, true);
+            GenerateRing(i);
         }
     }
 
-    private Vector3 GenerateRing(int ringIndex)
+    private GameObject CreateHex(Vector3 position, string name = "Hex")
     {
-        Vector3 position = transform.position;
+        GameObject tile = new GameObject(name, typeof(HexRenderer));
+        tile.transform.position = position;
 
-        position.x += hexData.outerRadius * ringIndex * Mathf.Sqrt(3);
+        HexRenderer hexRenderer = tile.GetComponent<HexRenderer>();
+        hexRenderer.InitializeMesh(hexData);
 
-        return position;
+        tile.transform.SetParent(transform, true);
+        return tile;
+    }
+
+    private void GenerateRing(int ringIndex)
+    {
+        int hexagonsInRing = 6 * ringIndex;
+        for (int i = 0; i < hexagonsInRing; i++)
+        {
+            Vector3 position = transform.position;
+            position.x += hexData.outerRadius * ringIndex * Mathf.Sqrt(3);
+
+            GameObject hex = CreateHex(position, $"Hex {i}");
+            Debug.Log(ringIndex % hexagonsInRing, hex);
+        }
     }
 
     private void OnValidate()
