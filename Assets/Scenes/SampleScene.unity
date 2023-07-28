@@ -523,7 +523,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 17c9d05eb1642b74cb23079f0349548d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rings: 1
+  rings: 2
   hexData:
     innerRadius: 0
     outerRadius: 1

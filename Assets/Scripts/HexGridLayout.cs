@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Net.Http.Headers;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -38,15 +39,56 @@ public class HexGridLayout : MonoBehaviour
 
     private void GenerateRing(int ringIndex)
     {
-        int hexagonsInRing = 6 * ringIndex;
-        for (int i = 0; i < hexagonsInRing; i++)
-        {
-            Vector3 position = transform.position;
-            position.x += hexData.outerRadius * ringIndex * Mathf.Sqrt(3);
+        if (ringIndex <= 0) return;
 
-            GameObject hex = CreateHex(position, $"Hex {i}");
-            Debug.Log(ringIndex % hexagonsInRing, hex);
+        int hexagonsInRing = 6 * ringIndex;
+        int nodesBeforeTurn = ringIndex % hexagonsInRing;
+
+        float width = Mathf.Sqrt(3) * (hexData.outerRadius * ringIndex);
+        float height = 2 * (hexData.outerRadius * ringIndex);
+
+        Vector3 referenceAnchor = transform.position + new Vector3(width * ringIndex, 0f, 0f);
+        GameObject rootHex = CreateHex(referenceAnchor, "Root Hex");
+
+        int turnIndex = 0;
+        int sideIndex = 0;
+        Vector3 offset = GetOffset(turnIndex, width, height);
+        for (int i = 1; i < hexagonsInRing; i++)
+        {
+            GameObject hex = CreateHex(referenceAnchor + offset, $"Hex {i}");
+
+            sideIndex++;
+            if (sideIndex == nodesBeforeTurn)
+            {
+                turnIndex++;
+                sideIndex = 0;
+                offset = GetOffset(turnIndex, width, height);
+                referenceAnchor = hex.transform.position;
+            }
         }
+    }
+
+    private Vector3 GetOffset(int turn, float width, float height)
+    {
+        Vector3 offset = Vector3.zero;
+
+        switch (turn)
+        {
+            case 0:
+                offset.x -= width * 0.5f;
+                offset.z += height * 0.75f;
+                break;
+
+            case 1:
+                offset.x -= width;
+                break;
+
+            default:
+                offset = Vector3.zero;
+                break;
+        }
+
+        return offset;
     }
 
     private void OnValidate()
