@@ -9,12 +9,19 @@ public class HexGridLayout : MonoBehaviour
     public class HexGridData
     {
         public HexData hexData;
-        public List<List<Vector3>> rings = new List<List<Vector3>>();
+        public List<List<Hex>> rings = new List<List<Hex>>();
 
-        public void AddRing(List<Vector3> positions)
+        public void AddRing(List<Hex> positions)
         {
             rings.Add(positions);
         }
+    }
+
+    public class Hex 
+    {
+        public Vector3Int coordinate;
+        public Vector3 position;
+        public GameObject hexObject;
     }
 
     [Header("Grid Settings")]
@@ -35,6 +42,11 @@ public class HexGridLayout : MonoBehaviour
     [Header("Tile Settings")]
     [SerializeField] private HexData hexData;
 
+    [Header("Debug")]
+    [SerializeField] private bool showCoords;
+    [SerializeField] private float coordinateHeightOffset = 0.1f;
+    [SerializeField] private GameObject coordinateDebugGO;
+
     private Coroutine spawnAnimation;
 
     private HexGridData LayoutGrid()
@@ -42,7 +54,13 @@ public class HexGridLayout : MonoBehaviour
         HexGridData grid = new HexGridData();
 
         //Center
-        grid.AddRing(new List<Vector3>() { transform.position });
+        grid.AddRing(new List<Hex>() 
+        { 
+            new Hex() 
+            { 
+                position = transform.position
+            } 
+        });
         
         for (int i = 0; i < rings; i++)
         {
@@ -52,7 +70,7 @@ public class HexGridLayout : MonoBehaviour
         return grid;
     }
 
-    private GameObject CreateHex(Vector3 position, string name = "Hex")
+    private GameObject CreateHex(Vector3 position, Vector3Int coords, string name = "Hex")
     {
         GameObject tile = new GameObject(name, typeof(HexRenderer));
         tile.transform.position = position;
@@ -60,15 +78,24 @@ public class HexGridLayout : MonoBehaviour
         HexRenderer hexRenderer = tile.GetComponent<HexRenderer>();
         hexRenderer.InitializeMesh(hexData);
 
+        if (showCoords)
+        {
+            GameObject coordinateUIobject = Instantiate(coordinateDebugGO, tile.transform);
+            coordinateUIobject.transform.position = position + (Vector3.up * (coordinateHeightOffset + hexData.height * 0.5f));
+
+            CoordinateTextDebugger coordinateTextDebugger = coordinateUIobject.GetComponent<CoordinateTextDebugger>();
+            coordinateTextDebugger.Initialize($"{coords.x}, {coords.y}, {coords.z}");
+        }
+
         tile.transform.SetParent(transform, true);
         return tile;
     }
 
-    private List<Vector3> GenerateRing(int ringIndex)
+    private List<Hex> GenerateRing(int ringIndex)
     {
-        List<Vector3> nodePositions = new List<Vector3>();
+        List<Hex> hexes = new List<Hex>();
 
-        if (ringIndex <= 0) return nodePositions;
+        if (ringIndex <= 0) return hexes;
 
         int hexagonsInRing = 6 * ringIndex;
         int nodesBeforeTurn = ringIndex % hexagonsInRing;
@@ -77,30 +104,46 @@ public class HexGridLayout : MonoBehaviour
         float height = 2 * hexData.outerRadius;
 
         Vector3 referenceAnchor = transform.position + new Vector3((width + gap) * ringIndex, 0f, 0f);
-        nodePositions.Add(referenceAnchor);
+        Vector3Int referenceCoord = new Vector3Int(-1, 1, 0) * ringIndex;
+        Hex referenceHex = new Hex()
+        {
+            position = referenceAnchor,
+            coordinate = referenceCoord
+        };
 
+        Hex rootHex = referenceHex;
+        hexes.Add(rootHex);
+
+        Vector3Int coordinateOffset;
         int turnIndex = 0;
         int sideIndex = 0;
-        Vector3 offset = GetOffset(turnIndex, width, height);
+        Vector3 offset = GetOffset(turnIndex, width, height, out coordinateOffset);
         for (int i = 1; i < hexagonsInRing; i++)
         {
-            nodePositions.Add(referenceAnchor + offset);
+            hexes.Add(new Hex()
+            {
+                position = referenceAnchor + offset,
+                coordinate = referenceCoord + coordinateOffset
+            });
+
             referenceAnchor += offset;
+            referenceCoord += coordinateOffset;
 
             sideIndex++;
             if (sideIndex == nodesBeforeTurn)
             {
                 turnIndex++;
                 sideIndex = 0;
-                offset = GetOffset(turnIndex, width, height);
-            }   
+                offset = GetOffset(turnIndex, width, height, out coordinateOffset);
+            }
         }
 
-        return nodePositions;
+        return hexes;
     }
 
-    private Vector3 GetOffset(int turn, float width, float height)
+    private Vector3 GetOffset(int turn, float width, float height, out Vector3Int coordinateOffset)
     {
+        Vector3Int coordOffset = Vector3Int.zero;
         Vector3 offset = Vector3.zero;
         float halfWidth = width * 0.5f;
         float threeQuarterHeight = height * 0.75f;
@@ -110,29 +153,41 @@ public class HexGridLayout : MonoBehaviour
             case 0:
                 offset.x -= halfWidth + (gap * 0.5f);
                 offset.z += threeQuarterHeight + gap;
+                coordOffset.z--;
+                coordOffset.x++;
                 break;
 
             case 1:
                 offset.x -= width + gap;
+                coordOffset.x++;
+                coordOffset.y--;
                 break;
 
             case 2:
                 offset.x -= halfWidth + (gap * 0.5f);
                 offset.z -= threeQuarterHeight + gap;
+                coordOffset.y--;
+                coordOffset.z++;
                 break;
 
             case 3:
                 offset.x += halfWidth + (gap * 0.5f);
                 offset.z -= threeQuarterHeight + gap;
+                coordOffset.x--;
+                coordOffset.z++;
                 break;
 
             case 4:
                 offset.x += width + gap;
+                coordOffset.x--;
+                coordOffset.y++;
                 break;
 
             case 5:
                 offset.x += halfWidth + (gap * 0.5f);
                 offset.z += threeQuarterHeight + gap;
+                coordOffset.y++;
+                coordOffset.z--;
                 break;
 
             default:
@@ -140,6 +195,7 @@ public class HexGridLayout : MonoBehaviour
                 break;
         }
 
+        coordinateOffset = coordOffset;
         return offset;
     }
 
@@ -166,15 +222,17 @@ public class HexGridLayout : MonoBehaviour
         {
             for (int j = 0; j < hexGridData.rings[i].Count; j++)
             {
-                Vector3 position = hexGridData.rings[i][j];
-                GameObject hex = CreateHex(position);
-                hex.transform.position += Vector3.up * heightOffset;
-                hex.transform.localScale = Vector3.zero;
-                hex.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+                Hex hex = hexGridData.rings[i][j];
+                Vector3 position = hexGridData.rings[i][j].position;
+                hex.hexObject = CreateHex(position, hex.coordinate);
 
-                hex.transform.DOScale(Vector3.one, scaleSpeed).SetEase(scaleEase);
-                hex.transform.DOMoveY(transform.position.y, speed).SetEase(ease);
-                hex.transform.DORotate(Vector3.zero, .5f, RotateMode.FastBeyond360).SetEase(Ease.OutQuint);
+                hex.hexObject.transform.position += Vector3.up * heightOffset;
+                hex.hexObject.transform.localScale = Vector3.zero;
+                hex.hexObject.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+
+                hex.hexObject.transform.DOScale(Vector3.one, scaleSpeed).SetEase(scaleEase);
+                hex.hexObject.transform.DOMoveY(transform.position.y, speed).SetEase(ease);
+                hex.hexObject.transform.DORotate(Vector3.zero, .5f, RotateMode.FastBeyond360).SetEase(Ease.OutQuint);
             }
 
             yield return new WaitForSeconds(spawnDelay);
